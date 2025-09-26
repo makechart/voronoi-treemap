@@ -1,7 +1,7 @@
 module.exports =
   pkg:
     name: 'voronoi-treemap', version: '0.0.1'
-    extend: {name: "base", version: "0.0.1"}
+    extend: {name: "@makechart/base"}
     dependencies: [
       {name: "@zbryikt/voronoijs", version: "main", path: "index.min.js"}
     ]
