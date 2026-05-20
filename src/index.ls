@@ -1,6 +1,6 @@
 module.exports =
   pkg:
-    name: 'voronoi-treemap', version: '0.0.1'
+    name: '@makechart/voronoi-treemap', version: '0.0.2'
     extend: {name: "@makechart/base"}
     dependencies: [
       {name: "@zbryikt/voronoijs", version: "main", path: "index.min.js"}
@@ -90,7 +90,7 @@ mod = ({context}) ->
     @fmt = chart.utils.format.from @cfg.label.format
     data = if @binding.category => @partial.filter ~> @legend.is-selected(it.category)
     else @partial
-    @parsed = children: d3.nest!.key(->it.category).entries(data).map -> it <<< {children: it.values}
+    @parsed = children: Array.from(d3.group(data, ->it.category), ([key, values]) -> {key, values, children: values})
     @treemap = new voronoi.Treemap(@parsed, voronoi.Polygon.create(w, h, 60), w, h)
     sites = @treemap.getSites!
     @g.shape.selectAll \path.data .data @treemap.getPolygons!
