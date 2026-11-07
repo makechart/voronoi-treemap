@@ -1,7 +1,8 @@
 module.exports =
   pkg:
     name: '@makechart/voronoi-treemap', version: '0.0.2'
-    extend: {name: "@makechart/base"}
+    # lite: 不帶 d3 的 base ( 見 @plotdb/chart utils )
+    extend: {name: "@makechart/base", path: "lite/index.html"}
     dependencies: [
       {name: "@zbryikt/voronoijs", version: "main", path: "index.min.js"}
     ]
@@ -9,7 +10,15 @@ module.exports =
     pubsub.fire \init, mod: mod {context} .then ~> it.0
 
 mod = ({context}) ->
-  {d3,ldcolor,voronoi,chart} = context
+  {ldcolor,voronoi,chart} = context
+  {scale: Scale, color: {turbo, discrete}, anim: {join}} = chart.utils
+  svgns = "http://www.w3.org/2000/svg"
+  # 同 d3.group: 依 key 分組, 保留第一次出現的順序
+  group = (list, key) ->
+    m = new Map!
+    list.map -> if m.has(k = key it) => m.get(k).push it else m.set k, [it]
+    m
+  set-attr = (n, k, v) -> if v? => n.setAttribute k, v else n.removeAttribute k
   sample: ->
     raw: [0 to 100].map (val) ~>
       name: "Node #val"
@@ -36,21 +45,20 @@ mod = ({context}) ->
     category: { type: \N, desc: "category"},
   init: ->
     @tint = tint = new chart.utils.tint!
-    @g = Object.fromEntries <[view legend]>.map ~> [it, d3.select(@layout.get-group it)]
-    @layout.get-group(\view).appendChild g = (document.createElementNS "http://www.w3.org/2000/svg", "g")
-    @g.shape = d3.select g
+    @g = Object.fromEntries <[view legend]>.map ~> [it, @layout.get-group it]
+    @g.shape = @g.view.appendChild document.createElementNS(svgns, \g)
     @site-boxes = []
     @legend = new chart.utils.legend do
       layout: @layout
       name: \legend
       root: @root
-      shape: (d) -> d3.select(@).attr \fill, tint.get d.key
+      shape: (d) -> @setAttribute \fill, tint.get d.key
       cfg: selectable: true
     @legend.on \select, ~> @parse!; @bind!; @resize!; @render!
     @tip = new chart.utils.tip do
       root: @root
       accessor: ({evt}) ~>
-        if !(evt.target and data = d3.select(evt.target).datum!) => return null
+        if !(evt.target and data = evt.target.__data__) => return null
         if Array.isArray(data) =>
           if !@_sites => return
           if !(data.idx?) => return
@@ -90,37 +98,38 @@ mod = ({context}) ->
     @fmt = chart.utils.format.from @cfg.label.format
     data = if @binding.category => @partial.filter ~> @legend.is-selected(it.category)
     else @partial
-    @parsed = children: Array.from(d3.group(data, ->it.category), ([key, values]) -> {key, values, children: values})
+    @parsed = children: Array.from(group(data, ->it.category), ([key, values]) -> {key, values, children: values})
     @treemap = new voronoi.Treemap(@parsed, voronoi.Polygon.create(w, h, 60), w, h)
     sites = @treemap.getSites!
-    @g.shape.selectAll \path.data .data @treemap.getPolygons!
-      ..exit!remove!
-      ..enter!append \path
-        .attr \class, \data
-        .each (d,i) -> d.idx = i
-    @g.shape.selectAll \path.data .attr \class, (d,i) -> if sites[i].lv <= 0 => 'data group' else 'data'
-    @polygons = @g.shape.selectAll \path.data
+    pj = join root: @g.shape, tag: \path, cls: \data, data: @treemap.getPolygons!
+    pj.exit.map -> it.remove!
+    pj.enter.map -> it.__data__.idx = pj.nodes.indexOf(it)
+    pj.nodes.map (n, i) -> n.setAttribute \class, (if sites[i].lv <= 0 => 'data group' else 'data')
+    @polygons = pj.nodes
 
-    @g.shape.selectAll \g.label .data sites
-      ..exit!remove!
-      ..enter!append \g .attr \class, \label
-        .each (d,i) ->
-          d3.select @
-            ..append \text .attr \class, 'name' .attr \font-size, '.8em'
-            ..append \text .attr \class, 'value'
-    @sites = @g.shape.selectAll \g.label
-    @sites.attr \font-size, @cfg.font.size
-    @sites.each (d,i) ->
-      d3.select @ .selectAll \text .data [d,d]
-        .attr \text-anchor, \middle
-        .attr \dominant-baseline, \center
+    lj = join root: @g.shape, tag: \g, cls: \label, data: sites
+    lj.exit.map -> it.remove!
+    lj.enter.map (n) ->
+      n.appendChild document.createElementNS(svgns, \text)
+        ..setAttribute \class, \name
+        ..setAttribute \font-size, '.8em'
+      n.appendChild document.createElementNS(svgns, \text)
+        ..setAttribute \class, \value
+    @sites = lj.nodes
+    @sites.map (n) ~>
+      set-attr n, \font-size, @cfg.font.size
+      d = n.__data__
+      Array.from(n.querySelectorAll \text).map (t) ->
+        t.__data__ = d
+        t.setAttribute \text-anchor, \middle
+        t.setAttribute \dominant-baseline, \center
 
     @scale =
-      x: d3.scaleLinear!domain [0,w] .range [0, w]
-      y: d3.scaleLinear!domain [0,h] .range [0, h]
-      color: d3.interpolateTurbo
+      x: Scale.linear!domain [0,w] .range [0, w]
+      y: Scale.linear!domain [0,h] .range [0, h]
+      color: turbo
     if @cfg? and @cfg.palette =>
-      @scale.color = d3.interpolateDiscrete @cfg.palette.colors.map -> ldcolor.web(it.value or it)
+      @scale.color = discrete @cfg.palette.colors.map -> ldcolor.web(it.value or it)
     @tint.set @cfg.palette
     sites = @treemap.getSites!
     @count = 0
@@ -134,31 +143,33 @@ mod = ({context}) ->
     [w,h] = [@box.width, @box.height]
     if !ticking =>
       @legend.render!
-      @sites.selectAll \.name
-        .attr \dy, \0.88em
-        .text ->
-          n = ("#{it.name or ''}")
-          return n
-          if it.lv > 0 => n.substring(0,7) + (if n.length > 7 => '...' else '') else ''
-        .attr \fill, (d,i) ~> if ldcolor.hcl(@tint.get d.category).l > 60 => \#000 else \#eee
-        .style \pointer-events, \none
-      @sites.selectAll \.value
-        .attr \dy, \-0.28em
-        .text ~> if it.lv > 0 => @fmt(it.area or 0) else ''
-        .attr \fill, (d,i) ~> if ldcolor.hcl(@tint.get d.category).l > 60 => \#000 else \#eee
-        .style \pointer-events, \none
-      @site-boxes = site-boxes = []
-      @sites.each (d,i) -> site-boxes.push @getBoundingClientRect!
-      @polygons
-        .attr \fill, (d,i) ~> @tint.get sites[i].category
-        .attr \stroke, @cfg.border.color
-        .attr \stroke-width, @cfg.border.stroke-width
+      fill = (d) ~> if ldcolor.hcl(@tint.get d.category).l > 60 => \#000 else \#eee
+      @sites.map (n) ~>
+        d = n.__data__
+        [tn, tv] = n.querySelectorAll \text
+        tn
+          ..setAttribute \dy, \0.88em
+          ..textContent = "#{d.name or ''}"
+          ..setAttribute \fill, fill(d)
+          ..style.pointerEvents = \none
+        tv
+          ..setAttribute \dy, \-0.28em
+          ..textContent = if d.lv > 0 => @fmt(d.area or 0) else ''
+          ..setAttribute \fill, fill(d)
+          ..style.pointerEvents = \none
+      @site-boxes = @sites.map -> it.getBoundingClientRect!
+      @polygons.map (n, i) ~>
+        n.setAttribute \fill, @tint.get sites[i].category
+        n.setAttribute \stroke, @cfg.border.color
+        n.setAttribute \stroke-width, @cfg.border.stroke-width
 
     site-boxes = @site-boxes
     boxes = []
 
-    @polygons.data polygons
-      .attr \d, (d,i) ->
+    # 同 d3 的 selection.data: 只更新現有的 path, 多的資料不管
+    @polygons.slice(0, polygons.length).map (n, i) ->
+      d = n.__data__ = polygons[i]
+      n.setAttribute \d, do ->
         d.idx = i
         if !(d and d.length) =>
           boxes.push {}
@@ -177,31 +188,24 @@ mod = ({context}) ->
         return ret.map(->it.join(' ')).join(' ')
 
     # attempt to hide unwanted outlier polygon, however seem to not work very well..?
-    @polygons
-      .attr \opacity, (d,i) ->
-        box = boxes[i]
-        x = box.x + box.width / 2
-        y = box.y + box.height / 2
-        hide = isNaN(box.x + box.y + box.width + box.height)
-        if hide => 0 else 1
-    @sites
-      .each (d,i) ->
-        box = boxes[i]
-        mybox = site-boxes[i]
-        if !mybox => mybox = @getBoundingClientRect!
-        x = box.x + box.width / 2
-        y = box.y + box.height / 2
-        hide = (isNaN(x) or isNaN(y))
-        d3.select @
-          .attr \transform, ->
-            x = box.x + box.width / 2
-            y = box.y + box.height / 2
-            if hide => [x,y] = [-10000,-10000]
-            return "translate(#x, #y)"
-          .attr \opacity, ->
-            if hide => 0
-            else (1 - 6 * ((mybox.width / (box.width >? 0) - 1) >? 0)) >? 0
-          .style \pointer-events, -> if hide => \none else ''
+    @polygons.map (n, i) ->
+      box = boxes[i]
+      hide = isNaN(box.x + box.y + box.width + box.height)
+      n.setAttribute \opacity, if hide => 0 else 1
+    @sites.map (n, i) ->
+      box = boxes[i]
+      mybox = site-boxes[i]
+      if !mybox => mybox = n.getBoundingClientRect!
+      x = box.x + box.width / 2
+      y = box.y + box.height / 2
+      hide = (isNaN(x) or isNaN(y))
+      if hide => [x,y] = [-10000,-10000]
+      n.setAttribute \transform, "translate(#x, #y)"
+      n.setAttribute \opacity, (
+        if hide => 0
+        else (1 - 6 * ((mybox.width / (box.width >? 0) - 1) >? 0)) >? 0
+      )
+      n.style.pointerEvents = if hide => \none else ''
 
   tick: ->
     if !@treemap => return
