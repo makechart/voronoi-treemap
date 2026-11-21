@@ -34,11 +34,11 @@ mod = ({context}) ->
     legend: \legend
   }) <<<
     voronoi:
-      max-count: type: \number, min: 1, max: 200, step: 1, default: 100
-      preserve: type: \choice, values: ["Larger Value", "Smaller Value", "As Input Order"]
+      max-count: type: \number, min: 1, max: 200, step: 1, default: 100, desc: {en: "most items to draw; the rest are dropped, see preserve", "zh-TW": "最多畫幾個項目；超過的捨去，捨去哪些見 preserve"}
+      preserve: type: \choice, values: ["Larger Value", "Smaller Value", "As Input Order"], desc: {en: "which items to keep when there are more than max-count: the larger values, the smaller values, or the first ones in data order", "zh-TW": "項目超過上限時保留哪些：數值較大的、數值較小的，或資料順序的前幾個"}
     border:
       color: type: \color, default: \#fff
-      stroke-width: type: \number, default: 1, min: 0, max: 100, step: 1
+      stroke-width: type: \number, default: 1, min: 0, max: 100, step: 1, desc: {en: "width of the borders between cells ( px )", "zh-TW": "區塊之間邊界的粗細 ( px )"}
   dimension:
     area: { type: \R, name: "area"},
     name: { type: \N, desc: "name" },
