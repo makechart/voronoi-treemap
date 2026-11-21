@@ -39,6 +39,10 @@ mod = ({context}) ->
     border:
       color: type: \color, default: \#fff
       stroke-width: type: \number, default: 1, min: 0, max: 100, step: 1, desc: {en: "width of the borders between cells ( px )", "zh-TW": "區塊之間邊界的粗細 ( px )"}
+  # 段落 ( tab ) 的說明, key 是段落的路徑. preset 的段落由 chart.utils.config.tabinfo 掛上來, 共用的 common 由核心補
+  tabinfo: chart.utils.config.tabinfo({label: \label, legend: \legend}) <<<
+    voronoi: desc: {en: "how many items are drawn, and which are kept when there are too many", "zh-TW": "最多畫幾個項目，以及太多時保留哪些"}
+    border: desc: {en: "the borders between cells", "zh-TW": "區塊之間的邊界"}
   dimension:
     area: { type: \R, name: "area"},
     name: { type: \N, desc: "name" },
