@@ -1,5 +1,9 @@
 # Change Logs
 
+## v0.0.4
+
+ - add `desc` ( en / zh-TW ) to the config items, shown under the label in the makechart style panel
+
 ## v0.0.3
 
  - extend the lite base ( `@makechart/base` `lite/index.html`, no d3 ): needs `@makechart/base` >= 0.2.0
